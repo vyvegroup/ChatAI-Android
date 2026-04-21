@@ -11,6 +11,8 @@ data class ChatMessage(
     val imageUrl: String? = null,
     val imageGenerationId: String? = null,
     val imageStatus: String? = null, // "generating", "completed", "failed"
+    val imageType: String? = null, // "standalone", "headshot", "gallery"
+    val galleryId: String? = null,
     val characterName: String? = null,
     val characterHeadshotUrl: String? = null,
     val isStreaming: Boolean = false,

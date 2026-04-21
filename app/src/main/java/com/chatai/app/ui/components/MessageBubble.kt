@@ -152,7 +152,7 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
             .animateContentSize(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Avatar
+        // Avatar - use headshot if available
         if (message.characterHeadshotUrl != null) {
             AsyncImage(
                 model = message.characterHeadshotUrl,
@@ -180,13 +180,24 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Name row
+            // Name row with optional inline headshot
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // If character headshot is available, show it inline next to the name
+                if (message.characterHeadshotUrl != null && message.characterName != null) {
+                    AsyncImage(
+                        model = message.characterHeadshotUrl,
+                        contentDescription = message.characterName,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape),
+                    )
+                }
+
                 Text(
                     text = message.characterName ?: "ChatAI",
                     color = ChatColors.TextPrimary,
@@ -232,7 +243,7 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
                 }
             }
 
-            // Image attachment
+            // Image attachment (for standalone images)
             message.imageUrl?.let { url ->
                 AsyncImage(
                     model = url,
@@ -242,6 +253,136 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .padding(top = 8.dp),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Horizontal scrollable gallery row for grouped gallery images.
+ * No scrollbar shown, user can swipe horizontally.
+ */
+@Composable
+fun GalleryRow(
+    messages: List<ChatMessage>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // Assistant header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(28.dp),
+                shape = CircleShape,
+                color = ChatColors.AssistantAvatarBg
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "AI",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Text(
+                text = "ChatAI",
+                color = ChatColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        // Horizontal scrollable image row - no scrollbar visible
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(x = 60.dp), // offset to align with text content
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(end = 16.dp)
+        ) {
+            items(messages) { message ->
+                when {
+                    message.imageStatus == "generating" -> {
+                        Surface(
+                            modifier = Modifier
+                                .width(240.dp)
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            color = ChatColors.SurfaceVariant
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = ChatColors.Accent,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Text(
+                                        text = "Generating...",
+                                        color = ChatColors.TextTertiary,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    message.imageUrl != null -> {
+                        Surface(
+                            modifier = Modifier
+                                .width(240.dp)
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            color = ChatColors.SurfaceVariant
+                        ) {
+                            AsyncImage(
+                                model = message.imageUrl,
+                                contentDescription = message.content,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp)),
+                            )
+                        }
+                    }
+                    message.imageStatus == "failed" -> {
+                        Surface(
+                            modifier = Modifier
+                                .width(180.dp)
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            color = ChatColors.SurfaceVariant
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.BrokenImage,
+                                        contentDescription = null,
+                                        tint = ChatColors.Error,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Text(
+                                        text = "Failed",
+                                        color = ChatColors.Error,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

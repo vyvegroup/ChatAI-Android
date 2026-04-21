@@ -23,15 +23,14 @@ fun ImageGenerationSheet(
     modifier: Modifier = Modifier
 ) {
     var prompt by remember { mutableStateOf("") }
-    var selectedWidth by remember { mutableStateOf(1024) }
-    var selectedHeight by remember { mutableStateOf(1024) }
-    var expanded by remember { mutableStateOf(false) }
+    var selectedWidth by remember { mutableIntStateOf(1024) }
+    var selectedHeight by remember { mutableIntStateOf(1024) }
 
     data class SizeOption(val label: String, val width: Int, val height: Int)
     val sizeOptions = listOf(
-        SizeOption("1024 × 1024", 1024, 1024),
-        SizeOption("1024 × 1792", 1024, 1792),
-        SizeOption("1792 × 1024", 1792, 1024)
+        SizeOption("1024 x 1024", 1024, 1024),
+        SizeOption("1024 x 1792", 1024, 1792),
+        SizeOption("1792 x 1024", 1792, 1024)
     )
 
     Column(
@@ -154,7 +153,7 @@ fun ImageGenerationSheet(
                 Text("Generating...", fontSize = 14.sp)
             } else {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+                    imageVector = Icons.Default.AddPhotoAlternate,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )

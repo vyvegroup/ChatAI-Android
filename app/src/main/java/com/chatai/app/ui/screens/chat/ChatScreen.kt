@@ -22,9 +22,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chatai.app.data.remote.AiModels
+import com.chatai.app.domain.model.ChatMessage
 import com.chatai.app.domain.model.Conversation
 import com.chatai.app.ui.components.*
 import com.chatai.app.ui.theme.ChatColors
+
+sealed class DisplayItem {
+    data class SingleMessage(val message: ChatMessage) : DisplayItem()
+    data class GalleryGroup(val messages: List<ChatMessage>) : DisplayItem()
+}
+
+fun buildDisplayItems(messages: List<ChatMessage>): List<DisplayItem> {
+    val items = mutableListOf<DisplayItem>()
+    var i = 0
+    while (i < messages.size) {
+        val msg = messages[i]
+        if (msg.role == "image" && msg.imageType == "gallery" && msg.galleryId != null) {
+            val galleryMessages = mutableListOf<ChatMessage>()
+            val gId = msg.galleryId
+            while (i < messages.size &&
+                messages[i].role == "image" &&
+                messages[i].imageType == "gallery" &&
+                messages[i].galleryId == gId
+            ) {
+                galleryMessages.add(messages[i])
+                i++
+            }
+            if (galleryMessages.size == 1) {
+                items.add(DisplayItem.SingleMessage(galleryMessages[0]))
+            } else {
+                items.add(DisplayItem.GalleryGroup(galleryMessages))
+            }
+        } else {
+            items.add(DisplayItem.SingleMessage(msg))
+            i++
+        }
+    }
+    return items
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +79,8 @@ fun ChatScreen(
     val showImageSheet by chatViewModel.showImageSheet.collectAsState()
     val showModelSheet by chatViewModel.showModelSheet.collectAsState()
     val selectedModel by chatViewModel.selectedModel.collectAsState()
+
+    val displayItems = remember(messages) { buildDisplayItems(messages) }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -65,29 +102,7 @@ fun ChatScreen(
         containerColor = ChatColors.Background
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
-            // Sidebar
-            Sidebar(
-                conversations = conversations,
-                currentConversationId = chatViewModel.currentConversationId.collectAsState().value,
-                onConversationClick = {
-                    chatViewModel.selectConversation(it)
-                    onSelectConversation(it)
-                    sidebarOpen = false
-                },
-                onNewChat = {
-                    chatViewModel.startNewChat()
-                    onNewChat()
-                    sidebarOpen = false
-                },
-                onDeleteConversation = {
-                    chatViewModel.deleteConversation(it)
-                    onDeleteConversation(it)
-                },
-                isOpen = sidebarOpen,
-                onClose = { sidebarOpen = false }
-            )
-
-            // Main content
+            // Main content - rendered first (bottom layer)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -155,8 +170,16 @@ fun ChatScreen(
                             .weight(1f),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        items(items = messages, key = { it.id }) { message ->
-                            MessageBubble(message = message)
+                        items(items = displayItems, key = {
+                            when (it) {
+                                is DisplayItem.SingleMessage -> it.message.id
+                                is DisplayItem.GalleryGroup -> "gallery_${it.messages.firstOrNull()?.galleryId ?: ""}"
+                            }
+                        }) { item ->
+                            when (item) {
+                                is DisplayItem.SingleMessage -> MessageBubble(message = item.message)
+                                is DisplayItem.GalleryGroup -> GalleryRow(messages = item.messages)
+                            }
                         }
                         item { Spacer(modifier = Modifier.height(8.dp)) }
                     }
@@ -177,14 +200,36 @@ fun ChatScreen(
                 )
             }
 
-            // Sidebar scrim
+            // Sidebar overlay: scrim FIRST, then sidebar ON TOP of scrim
+            // This fixes the bug where scrim blocked sidebar touch events
             if (sidebarOpen) {
+                // Scrim covers full screen, catches clicks to close
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
+                        .background(Color.Black.copy(alpha = 0.5f))
                         .clickable { sidebarOpen = false }
-                        .padding(start = 280.dp)
+                )
+                // Sidebar rendered AFTER scrim so it's on top and fully interactive
+                Sidebar(
+                    conversations = conversations,
+                    currentConversationId = chatViewModel.currentConversationId.collectAsState().value,
+                    onConversationClick = {
+                        chatViewModel.selectConversation(it)
+                        onSelectConversation(it)
+                        sidebarOpen = false
+                    },
+                    onNewChat = {
+                        chatViewModel.startNewChat()
+                        onNewChat()
+                        sidebarOpen = false
+                    },
+                    onDeleteConversation = {
+                        chatViewModel.deleteConversation(it)
+                        onDeleteConversation(it)
+                    },
+                    isOpen = true,
+                    onClose = { sidebarOpen = false }
                 )
             }
         }
@@ -234,7 +279,6 @@ private fun WelcomeScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ChatGPT-style logo
         Surface(
             modifier = Modifier.size(48.dp),
             shape = CircleShape,

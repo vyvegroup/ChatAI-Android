@@ -10,9 +10,6 @@ import kotlinx.coroutines.flow.flowOn
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -45,7 +42,7 @@ class OpenRouterApi() {
         )
 
         val jsonBody = gson.toJson(request)
-        Log.d(TAG, "Request: $jsonBody")
+        Log.d(TAG, "Request model: $model, messages: ${messages.size}")
 
         val requestBody = jsonBody.toRequestBody(jsonMediaType)
 
@@ -58,48 +55,7 @@ class OpenRouterApi() {
             .addHeader("X-Title", "ChatAI Android")
             .build()
 
-        val factory = EventSources.createFactory(client)
-
-        var eventSource: EventSource? = null
-
-        try {
-            eventSource = factory.newEventSource(httpRequest, object : EventSourceListener() {
-                override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                    if (data == "[DONE]") {
-                        eventSource.cancel()
-                        return
-                    }
-
-                    try {
-                        val chunk = gson.fromJson(data, StreamChunk::class.java)
-                        val content = chunk.choices?.firstOrNull()?.delta?.content
-                        if (content != null) {
-                            // We can't directly emit from here, use a callback approach
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing SSE chunk: ${e.message}")
-                    }
-                }
-
-                override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                    Log.e(TAG, "SSE Error: ${t?.message}, Response: ${response?.code}")
-                    eventSource.cancel()
-                }
-
-                override fun onClosed(eventSource: EventSource) {
-                    Log.d(TAG, "SSE connection closed")
-                }
-
-                override fun onOpen(eventSource: EventSource, response: Response) {
-                    Log.d(TAG, "SSE connection opened")
-                }
-            })
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating SSE connection: ${e.message}")
-            throw e
-        }
-
-        // Alternative: Use synchronous streaming for better control
+        // Use synchronous streaming for reliable Flow emission
         val response = client.newCall(httpRequest).execute()
 
         if (!response.isSuccessful) {

@@ -1,6 +1,7 @@
 package com.chatai.app.ui.screens.chat
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chatai.app.ChatApplication
@@ -9,10 +10,30 @@ import com.chatai.app.data.remote.ImageApi
 import com.chatai.app.data.repository.ChatRepository
 import com.chatai.app.data.repository.StreamEvent
 import com.chatai.app.domain.model.ChatMessage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
+
+// Data classes for parsed image tags
+data class ImageTag(
+    val type: String, // "image", "headshot", "gallery"
+    val prompts: List<String>,
+    val name: String? = null // for headshot
+)
+
+data class ParsedContent(
+    val cleanContent: String,
+    val headshotTag: ImageTag? = null,
+    val imageTags: List<ImageTag> = emptyList(),
+    val galleryTags: List<ImageTag> = emptyList()
+)
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    companion object {
+        private const val TAG = "ChatViewModel"
+    }
 
     private val repository: ChatRepository
 
@@ -92,7 +113,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             repository.getMessages(conversationId).collect { messageList ->
                 _messages.value = messageList
                 chatHistory.clear()
-                chatHistory.addAll(messageList.filter { !it.isStreaming })
+                chatHistory.addAll(messageList.filter { !it.isStreaming && it.role != "image" })
             }
         }
     }
@@ -144,6 +165,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 is StreamEvent.StreamCompleted -> {
                     _streamingMessageId.value = null
                     _isLoading.value = false
+
+                    // Parse content for image generation tags
+                    val parsed = parseImageTags(event.fullContent)
+                    val hasImageTags = parsed.headshotTag != null || parsed.imageTags.isNotEmpty() || parsed.galleryTags.isNotEmpty()
+
+                    if (hasImageTags) {
+                        // Update assistant message with clean content
+                        repository.updateMessageContent(event.messageId, parsed.cleanContent)
+                        _messages.value = _messages.value.map { msg ->
+                            if (msg.id == event.messageId) {
+                                msg.copy(content = parsed.cleanContent, isStreaming = false)
+                            } else msg
+                        }
+
+                        // Process image tags
+                        viewModelScope.launch {
+                            processImageTags(conversationId, event.messageId, parsed)
+                        }
+                    }
+
                     chatHistory.add(ChatMessage(
                         conversationId = conversationId,
                         role = "user",
@@ -153,7 +194,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     chatHistory.add(ChatMessage(
                         conversationId = conversationId,
                         role = "assistant",
-                        content = event.fullContent,
+                        content = parsed.cleanContent,
                         modelName = selectedModel.value.name
                     ))
                 }
@@ -167,10 +208,203 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Parse the AI response content for image generation tags:
+     * [IMAGE: prompt] - single image
+     * [HEADSHOT: prompt] name - character portrait
+     * [GALLERY: prompt1 | prompt2 | prompt3] - horizontal gallery
+     */
+    private fun parseImageTags(content: String): ParsedContent {
+        val galleryTags = mutableListOf<ImageTag>()
+        val headshotTag = mutableListOf<ImageTag>()
+        val imageTags = mutableListOf<ImageTag>()
+        var cleanContent = content
+
+        // Parse [GALLERY: prompt1 | prompt2 | prompt3]
+        val galleryPattern = Regex("\\[GALLERY:\\s*(.+?)\\]", RegexOption.DOT_MATCHES_ALL)
+        galleryPattern.findAll(content).forEach { match ->
+            val prompts = match.groupValues[1].split("\\|").map { it.trim() }.filter { it.isNotBlank() }
+            if (prompts.isNotEmpty()) {
+                galleryTags.add(ImageTag(type = "gallery", prompts = prompts))
+            }
+            cleanContent = cleanContent.replace(match.value, "")
+        }
+
+        // Parse [HEADSHOT: prompt] name
+        val headshotPattern = Regex("\\[HEADSHOT:\\s*(.+?)\\]\\s*([^\n]+)")
+        headshotPattern.findAll(content).forEach { match ->
+            headshotTag.add(ImageTag(
+                type = "headshot",
+                prompts = listOf(match.groupValues[1].trim()),
+                name = match.groupValues[2].trim()
+            ))
+            cleanContent = cleanContent.replace(match.value, match.groupValues[2].trim())
+        }
+
+        // Parse [IMAGE: prompt]
+        val imagePattern = Regex("\\[IMAGE:\\s*(.+?)\\]", RegexOption.DOT_MATCHES_ALL)
+        imagePattern.findAll(content).forEach { match ->
+            imageTags.add(ImageTag(type = "image", prompts = listOf(match.groupValues[1].trim())))
+            cleanContent = cleanContent.replace(match.value, "")
+        }
+
+        // Clean up extra whitespace and newlines
+        cleanContent = cleanContent
+            .replace(Regex("\\n{3,}"), "\n\n")
+            .replace(Regex("^[\\s\\n]+"), "")
+            .replace(Regex("[\\s\\n]+$"), "")
+            .trim()
+
+        return ParsedContent(
+            cleanContent = cleanContent,
+            headshotTag = headshotTag.firstOrNull(),
+            imageTags = imageTags,
+            galleryTags = galleryTags
+        )
+    }
+
+    private suspend fun processImageTags(conversationId: String, assistantMessageId: String, parsed: ParsedContent) {
+        // Process headshot first
+        parsed.headshotTag?.let { tag ->
+            _isGeneratingImage.value = true
+            try {
+                val prompt = tag.prompts.first()
+                val result = ImageApi.generateImage(prompt)
+                result.onSuccess { imageUrl ->
+                    // Update assistant message with headshot
+                    repository.updateAssistantMessage(
+                        id = assistantMessageId,
+                        content = _messages.value.find { it.id == assistantMessageId }?.content ?: "",
+                        characterName = tag.name,
+                        characterHeadshotUrl = imageUrl
+                    )
+                    _messages.value = _messages.value.map { msg ->
+                        if (msg.id == assistantMessageId) {
+                            msg.copy(
+                                characterName = tag.name,
+                                characterHeadshotUrl = imageUrl
+                            )
+                        } else msg
+                    }
+                    Log.d(TAG, "Headshot generated: $imageUrl")
+                }.onFailure { e ->
+                    Log.e(TAG, "Headshot generation failed: ${e.message}")
+                    _error.value = "Failed to generate portrait: ${e.message}"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Headshot error: ${e.message}")
+            }
+            _isGeneratingImage.value = false
+        }
+
+        // Process standalone images
+        parsed.imageTags.forEach { tag ->
+            generateInlineImage(conversationId, tag)
+        }
+
+        // Process galleries
+        parsed.galleryTags.forEach { tag ->
+            generateGallery(conversationId, tag)
+        }
+    }
+
+    private suspend fun generateInlineImage(conversationId: String, tag: ImageTag) {
+        val prompt = tag.prompts.first()
+        _isGeneratingImage.value = true
+
+        val baseTime = System.currentTimeMillis()
+        val imageMsg = repository.generateImage(
+            conversationId = conversationId,
+            prompt = prompt,
+            imageType = "standalone",
+            timestamp = baseTime
+        )
+        _messages.value = _messages.value + imageMsg
+
+        val result = ImageApi.generateImage(prompt)
+        result.onSuccess { imageUrl ->
+            repository.updateImageResult(imageMsg.id, imageUrl, "completed")
+            _messages.value = _messages.value.map { msg ->
+                if (msg.id == imageMsg.id) {
+                    msg.copy(imageUrl = imageUrl, imageStatus = "completed")
+                } else msg
+            }
+            Log.d(TAG, "Inline image generated: $imageUrl")
+        }.onFailure { e ->
+            repository.updateImageResult(imageMsg.id, null, "failed")
+            _messages.value = _messages.value.map { msg ->
+                if (msg.id == imageMsg.id) {
+                    msg.copy(imageStatus = "failed")
+                } else msg
+            }
+            _error.value = "Image generation failed: ${e.message}"
+            Log.e(TAG, "Inline image failed: ${e.message}")
+        }
+
+        _isGeneratingImage.value = false
+    }
+
+    private suspend fun generateGallery(conversationId: String, tag: ImageTag) {
+        _isGeneratingImage.value = true
+        val galleryId = UUID.randomUUID().toString()
+        val baseTime = System.currentTimeMillis()
+
+        // Create all gallery image messages at once
+        val galleryMessages = mutableListOf<ChatMessage>()
+        tag.prompts.forEachIndexed { index, prompt ->
+            val imageMsg = repository.generateImage(
+                conversationId = conversationId,
+                prompt = prompt,
+                imageType = "gallery",
+                galleryId = galleryId,
+                timestamp = baseTime + index
+            )
+            galleryMessages.add(imageMsg)
+        }
+        _messages.value = _messages.value + galleryMessages
+
+        // Generate images concurrently
+        tag.prompts.forEachIndexed { index, prompt ->
+            viewModelScope.launch {
+                val msgId = galleryMessages[index].id
+                try {
+                    val result = ImageApi.generateImage(prompt)
+                    result.onSuccess { imageUrl ->
+                        repository.updateImageResult(msgId, imageUrl, "completed")
+                        _messages.value = _messages.value.map { msg ->
+                            if (msg.id == msgId) {
+                                msg.copy(imageUrl = imageUrl, imageStatus = "completed")
+                            } else msg
+                        }
+                    }.onFailure { e ->
+                        repository.updateImageResult(msgId, null, "failed")
+                        _messages.value = _messages.value.map { msg ->
+                            if (msg.id == msgId) {
+                                msg.copy(imageStatus = "failed")
+                            } else msg
+                        }
+                        Log.e(TAG, "Gallery image $index failed: ${e.message}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Gallery image $index error: ${e.message}")
+                }
+            }
+        }
+
+        _isGeneratingImage.value = false
+    }
+
     fun generateImage(prompt: String, width: Int = 1024, height: Int = 1024) {
         if (prompt.isBlank()) return
 
+        // Dismiss sheet first to prevent crash
+        _showImageSheet.value = false
+        _isGeneratingImage.value = true
+
         viewModelScope.launch {
+            // Small delay to let the sheet dismiss animation complete
+            delay(300)
+
             val conversationId = _currentConversationId.value
             if (conversationId == null) {
                 val conversation = repository.createConversation()
@@ -184,8 +418,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun doGenerateImage(conversationId: String, prompt: String, width: Int, height: Int) {
-        _isGeneratingImage.value = true
-        _showImageSheet.value = false
         _error.value = null
 
         // Add placeholder
@@ -194,6 +426,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val result = ImageApi.generateImage(prompt, width, height)
         result.onSuccess { imageUrl ->
+            repository.updateImageResult(imageMsg.id, imageUrl, "completed")
             _messages.value = _messages.value.map { msg ->
                 if (msg.id == imageMsg.id) {
                     msg.copy(imageUrl = imageUrl, imageStatus = "completed")
@@ -201,6 +434,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             chatHistory.add(imageMsg.copy(imageUrl = imageUrl, imageStatus = "completed"))
         }.onFailure { error ->
+            repository.updateImageResult(imageMsg.id, null, "failed")
             _messages.value = _messages.value.map { msg ->
                 if (msg.id == imageMsg.id) {
                     msg.copy(imageStatus = "failed")

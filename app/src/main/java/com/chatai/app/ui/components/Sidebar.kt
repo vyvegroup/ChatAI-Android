@@ -1,6 +1,5 @@
 package com.chatai.app.ui.components
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,135 +35,136 @@ fun Sidebar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = isOpen,
-        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+    Column(
         modifier = modifier
+            .fillMaxHeight()
+            .width(280.dp)
+            .shadow(elevation = 16.dp)
+            .background(ChatColors.SidebarBackground)
     ) {
-        Column(
+        // Header with hamburger and close
+        Row(
             modifier = Modifier
-                .fillMaxHeight()
-                .width(280.dp)
-                .background(ChatColors.SidebarBackground)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header with hamburger and search
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Close sidebar",
+                    tint = ChatColors.TextSecondary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = ChatColors.TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Search
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = ChatColors.SurfaceVariant
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = ChatColors.TextTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Search chats...",
+                    color = ChatColors.TextTertiary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // New Chat button
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = ChatColors.SurfaceVariant,
+            onClick = onNewChat
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Close sidebar",
-                        tint = ChatColors.TextSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = ChatColors.TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            // Search
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                shape = RoundedCornerShape(10.dp),
-                color = ChatColors.SurfaceVariant
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = ChatColors.Accent
                 ) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = ChatColors.TextTertiary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // New Chat button
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = ChatColors.SurfaceVariant,
-                onClick = onNewChat
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.size(28.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = ChatColors.Accent
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                tint = ChatColors.TextOnAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            tint = ChatColors.TextOnAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
+                }
+                Text(
+                    text = "New chat",
+                    color = ChatColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Conversations grouped by date
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            val grouped = groupConversationsByDate(conversations)
+            grouped.forEach { (dateLabel, convs) ->
+                item {
                     Text(
-                        text = "New chat",
-                        color = ChatColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        text = dateLabel,
+                        color = ChatColors.TextTertiary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Conversations grouped by date
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                val grouped = groupConversationsByDate(conversations)
-                grouped.forEach { (dateLabel, convs) ->
-                    item {
-                        Text(
-                            text = dateLabel,
-                            color = ChatColors.TextTertiary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
-                    items(convs) { conversation ->
-                        ConversationItem(
-                            conversation = conversation,
-                            isSelected = conversation.id == currentConversationId,
-                            onClick = { onConversationClick(conversation.id) },
-                            onDelete = { onDeleteConversation(conversation.id) }
-                        )
-                    }
+                items(convs) { conversation ->
+                    ConversationItem(
+                        conversation = conversation,
+                        isSelected = conversation.id == currentConversationId,
+                        onClick = { onConversationClick(conversation.id) },
+                        onDelete = { onDeleteConversation(conversation.id) }
+                    )
                 }
             }
         }
@@ -216,7 +217,6 @@ private fun ConversationItem(
 }
 
 private fun groupConversationsByDate(conversations: List<Conversation>): Map<String, List<Conversation>> {
-    val calendar = Calendar.getInstance()
     val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
     val yesterday = Calendar.getInstance().apply { timeInMillis = today.timeInMillis; add(Calendar.DAY_OF_MONTH, -1) }
     val sevenDaysAgo = Calendar.getInstance().apply { timeInMillis = today.timeInMillis; add(Calendar.DAY_OF_MONTH, -7) }

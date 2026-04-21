@@ -14,6 +14,8 @@ data class MessageEntity(
     val imageUrl: String? = null,
     val imageGenerationId: String? = null,
     val imageStatus: String? = null,
+    val imageType: String? = null,
+    val galleryId: String? = null,
     val characterName: String? = null,
     val characterHeadshotUrl: String? = null,
     val modelName: String? = null
@@ -27,6 +29,8 @@ data class MessageEntity(
         imageUrl = imageUrl,
         imageGenerationId = imageGenerationId,
         imageStatus = imageStatus,
+        imageType = imageType,
+        galleryId = galleryId,
         characterName = characterName,
         characterHeadshotUrl = characterHeadshotUrl,
         modelName = modelName
@@ -42,6 +46,8 @@ data class MessageEntity(
             imageUrl = message.imageUrl,
             imageGenerationId = message.imageGenerationId,
             imageStatus = message.imageStatus,
+            imageType = message.imageType,
+            galleryId = message.galleryId,
             characterName = message.characterName,
             characterHeadshotUrl = message.characterHeadshotUrl,
             modelName = message.modelName
