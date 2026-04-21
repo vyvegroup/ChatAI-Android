@@ -3,6 +3,7 @@ package com.chatai.app.ui.components
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.widget.TextView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
