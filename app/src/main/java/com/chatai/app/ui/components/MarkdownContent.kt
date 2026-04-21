@@ -1,16 +1,11 @@
 package com.chatai.app.ui.components
 
-import android.graphics.Typeface
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
 import android.widget.TextView
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember

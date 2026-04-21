@@ -27,10 +27,11 @@ fun ImageGenerationSheet(
     var selectedHeight by remember { mutableStateOf(1024) }
     var expanded by remember { mutableStateOf(false) }
 
+    data class SizeOption(val label: String, val width: Int, val height: Int)
     val sizeOptions = listOf(
-        "1024 × 1024" to 1024 to 1024,
-        "1024 × 1792" to 1024 to 1792,
-        "1792 × 1024" to 1792 to 1024
+        SizeOption("1024 × 1024", 1024, 1024),
+        SizeOption("1024 × 1792", 1024, 1792),
+        SizeOption("1792 × 1024", 1792, 1024)
     )
 
     Column(
@@ -100,18 +101,17 @@ fun ImageGenerationSheet(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            sizeOptions.forEach { (label, size) ->
-                val (w, h) = size
-                val isSelected = selectedWidth == w && selectedHeight == h
+            sizeOptions.forEach { option ->
+                val isSelected = selectedWidth == option.width && selectedHeight == option.height
                 FilterChip(
                     selected = isSelected,
                     onClick = {
-                        selectedWidth = w
-                        selectedHeight = h
+                        selectedWidth = option.width
+                        selectedHeight = option.height
                     },
                     label = {
                         Text(
-                            text = label,
+                            text = option.label,
                             fontSize = 12.sp
                         )
                     },
