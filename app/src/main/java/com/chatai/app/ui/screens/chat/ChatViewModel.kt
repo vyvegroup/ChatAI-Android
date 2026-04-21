@@ -324,7 +324,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun processImageTags(conversationId: String, assistantMessageId: String, parsed: Parsed) {
+    private suspend fun processImageTags(conversationId: String, assistantMessageId: String, parsed: ParsedContent) {
         try {
             // Process headshot first (sequential)
             parsed.headshotTag?.let { tag ->
