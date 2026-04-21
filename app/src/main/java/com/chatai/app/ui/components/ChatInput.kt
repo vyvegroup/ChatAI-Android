@@ -28,6 +28,7 @@ fun ChatInput(
     message: String,
     onMessageChange: (String) -> Unit,
     onSend: () -> Unit,
+    onGenerateImage: () -> Unit = {},
     isStreaming: Boolean,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -59,15 +60,16 @@ fun ChatInput(
                     .padding(horizontal = 20.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Attachment button
+                // Image generation button
                 IconButton(
-                    onClick = { /* TODO: Image attachment */ },
-                    modifier = Modifier.size(40.dp)
+                    onClick = onGenerateImage,
+                    modifier = Modifier.size(40.dp),
+                    enabled = !isStreaming
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Attach",
-                        tint = ChatColors.IconTint,
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "Generate image",
+                        tint = if (isStreaming) ChatColors.IconTint.copy(alpha = 0.4f) else ChatColors.IconTint,
                         modifier = Modifier.size(22.dp)
                     )
                 }

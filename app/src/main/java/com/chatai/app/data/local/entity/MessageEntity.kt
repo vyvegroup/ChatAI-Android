@@ -12,8 +12,11 @@ data class MessageEntity(
     val content: String,
     val timestamp: Long,
     val imageUrl: String? = null,
+    val imageGenerationId: String? = null,
+    val imageStatus: String? = null,
     val characterName: String? = null,
-    val characterHeadshotUrl: String? = null
+    val characterHeadshotUrl: String? = null,
+    val modelName: String? = null
 ) {
     fun toDomainModel(): ChatMessage = ChatMessage(
         id = id,
@@ -22,8 +25,11 @@ data class MessageEntity(
         content = content,
         timestamp = timestamp,
         imageUrl = imageUrl,
+        imageGenerationId = imageGenerationId,
+        imageStatus = imageStatus,
         characterName = characterName,
-        characterHeadshotUrl = characterHeadshotUrl
+        characterHeadshotUrl = characterHeadshotUrl,
+        modelName = modelName
     )
 
     companion object {
@@ -34,8 +40,11 @@ data class MessageEntity(
             content = message.content,
             timestamp = message.timestamp,
             imageUrl = message.imageUrl,
+            imageGenerationId = message.imageGenerationId,
+            imageStatus = message.imageStatus,
             characterName = message.characterName,
-            characterHeadshotUrl = message.characterHeadshotUrl
+            characterHeadshotUrl = message.characterHeadshotUrl,
+            modelName = message.modelName
         )
     }
 }

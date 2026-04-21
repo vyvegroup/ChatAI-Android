@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,7 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,32 +47,54 @@ fun Sidebar(
                 .width(280.dp)
                 .background(ChatColors.SidebarBackground)
         ) {
-            // Header
+            // Header with hamburger and search
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "ChatAI",
-                        color = ChatColors.TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = MaterialTheme.typography.titleMedium.fontWeight
+                IconButton(onClick = onClose) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Close sidebar",
+                        tint = ChatColors.TextSecondary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-
+                Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close sidebar",
+                        contentDescription = "Close",
                         tint = ChatColors.TextSecondary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
+
+            // Search
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = ChatColors.SurfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = ChatColors.TextTertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // New Chat button
             Surface(
@@ -89,29 +112,38 @@ fun Sidebar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "New Chat",
-                        tint = ChatColors.TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Surface(
+                        modifier = Modifier.size(28.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = ChatColors.Accent
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                tint = ChatColors.TextOnAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "New chat",
                         color = ChatColors.TextPrimary,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Conversations list grouped by date
+            // Conversations grouped by date
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 val grouped = groupConversationsByDate(conversations)
                 grouped.forEach { (dateLabel, convs) ->
@@ -119,7 +151,8 @@ fun Sidebar(
                         Text(
                             text = dateLabel,
                             color = ChatColors.TextTertiary,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
@@ -144,8 +177,6 @@ private fun ConversationItem(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var showDelete by remember { mutableStateOf(false) }
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -163,24 +194,21 @@ private fun ConversationItem(
             Text(
                 text = conversation.title,
                 color = if (isSelected) ChatColors.TextPrimary else ChatColors.TextSecondary,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
-            // Delete button (appears on long press or hover)
             IconButton(
-                onClick = {
-                    onDelete()
-                },
-                modifier = Modifier.size(32.dp)
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
-                    imageVector = if (showDelete) Icons.Default.Delete else Icons.Default.MoreVert,
-                    contentDescription = "More",
-                    tint = ChatColors.TextTertiary,
-                    modifier = Modifier.size(18.dp)
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete",
+                    tint = ChatColors.TextTertiary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -192,7 +220,6 @@ private fun groupConversationsByDate(conversations: List<Conversation>): Map<Str
     val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
     val yesterday = Calendar.getInstance().apply { timeInMillis = today.timeInMillis; add(Calendar.DAY_OF_MONTH, -1) }
     val sevenDaysAgo = Calendar.getInstance().apply { timeInMillis = today.timeInMillis; add(Calendar.DAY_OF_MONTH, -7) }
-    val thirtyDaysAgo = Calendar.getInstance().apply { timeInMillis = today.timeInMillis; add(Calendar.DAY_OF_MONTH, -30) }
 
     return conversations.groupBy { conv ->
         val convCalendar = Calendar.getInstance().apply { timeInMillis = conv.updatedAt }
@@ -200,7 +227,6 @@ private fun groupConversationsByDate(conversations: List<Conversation>): Map<Str
             convCalendar.after(today) -> "Today"
             convCalendar.after(yesterday) -> "Yesterday"
             convCalendar.after(sevenDaysAgo) -> "Previous 7 Days"
-            convCalendar.after(thirtyDaysAgo) -> "Previous 30 Days"
             else -> SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(conv.updatedAt))
         }
     }

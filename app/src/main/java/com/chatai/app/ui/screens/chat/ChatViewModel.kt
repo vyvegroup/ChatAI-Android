@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chatai.app.ChatApplication
+import com.chatai.app.data.remote.AiModels
+import com.chatai.app.data.remote.ImageApi
 import com.chatai.app.data.repository.ChatRepository
 import com.chatai.app.data.repository.StreamEvent
 import com.chatai.app.domain.model.ChatMessage
@@ -22,8 +24,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _apiKey = MutableStateFlow("")
     val apiKey: StateFlow<String> = _apiKey
 
-    private val _selectedModel = MutableStateFlow("google/gemma-4-31b-it:free")
-    val selectedModel: StateFlow<String> = _selectedModel
+    private val _selectedModel = MutableStateFlow(AiModels.getDefaultModel())
+    val selectedModel: StateFlow<com.chatai.app.data.remote.AiModel> = _selectedModel
 
     private val _currentConversationId = MutableStateFlow<String?>(null)
     val currentConversationId: StateFlow<String?> = _currentConversationId
@@ -34,26 +36,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    private val _isGeneratingImage = MutableStateFlow(false)
+    val isGeneratingImage: StateFlow<Boolean> = _isGeneratingImage
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
     private val _streamingMessageId = MutableStateFlow<String?>(null)
     val streamingMessageId: StateFlow<String?> = _streamingMessageId
 
+    private val _showImageSheet = MutableStateFlow(false)
+    val showImageSheet: StateFlow<Boolean> = _showImageSheet
+
+    private val _showModelSheet = MutableStateFlow(false)
+    val showModelSheet: StateFlow<Boolean> = _showModelSheet
+
     private var chatHistory = mutableListOf<ChatMessage>()
 
     init {
-        // Load API key from preferences (simplified - in real app use DataStore)
         _apiKey.value = "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"
     }
 
-    fun setApiKey(key: String) {
-        _apiKey.value = key
+    fun setApiKey(key: String) { _apiKey.value = key }
+
+    fun selectModel(model: com.chatai.app.data.remote.AiModel) {
+        _selectedModel.value = model
+        _showModelSheet.value = false
     }
 
-    fun setModel(model: String) {
-        _selectedModel.value = model
-    }
+    fun toggleImageSheet() { _showImageSheet.value = !_showImageSheet.value }
+    fun dismissImageSheet() { _showImageSheet.value = false }
+
+    fun toggleModelSheet() { _showModelSheet.value = !_showModelSheet.value }
+    fun dismissModelSheet() { _showModelSheet.value = false }
 
     fun startNewChat() {
         viewModelScope.launch {
@@ -85,18 +100,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(content: String) {
         if (content.isBlank()) return
         if (_apiKey.value.isBlank()) {
-            _error.value = "Please set API key in settings"
+            _error.value = "Please set API key"
             return
         }
 
         viewModelScope.launch {
             val conversationId = _currentConversationId.value
             if (conversationId == null) {
-                // Create new conversation
                 val conversation = repository.createConversation()
                 _currentConversationId.value = conversation.id
                 loadMessages(conversation.id)
-                // Re-call with new id
                 sendMessageToApi(conversation.id, content)
             } else {
                 sendMessageToApi(conversationId, content)
@@ -110,41 +123,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         repository.sendMessageStream(
             apiKey = apiKey.value,
-            model = selectedModel.value,
+            model = selectedModel.value.id,
             conversationId = conversationId,
-            messages = chatHistory.filter { it.content.isNotBlank() },
-            userMessage = content
+            messages = chatHistory.filter { it.content.isNotBlank() && it.role != "image" },
+            userMessage = content,
+            modelName = selectedModel.value.name
         ).collect { event ->
             when (event) {
-                is StreamEvent.UserMessageSaved -> {
-                    // User message saved
-                }
+                is StreamEvent.UserMessageSaved -> { }
                 is StreamEvent.AssistantMessageStarted -> {
                     _streamingMessageId.value = event.message.id
                 }
                 is StreamEvent.ContentDelta -> {
-                    // Update streaming message in list
                     _messages.value = _messages.value.map { msg ->
                         if (msg.id == event.messageId) {
                             msg.copy(content = event.fullContent, isStreaming = true)
-                        } else {
-                            msg
-                        }
+                        } else msg
                     }
                 }
                 is StreamEvent.StreamCompleted -> {
                     _streamingMessageId.value = null
                     _isLoading.value = false
-                    // Add to history
-                    chatHistory.add(ChatMessage(
-                        conversationId = conversationId,
-                        role = "assistant",
-                        content = event.fullContent
-                    ))
                     chatHistory.add(ChatMessage(
                         conversationId = conversationId,
                         role = "user",
-                        content = content
+                        content = content,
+                        modelName = selectedModel.value.name
+                    ))
+                    chatHistory.add(ChatMessage(
+                        conversationId = conversationId,
+                        role = "assistant",
+                        content = event.fullContent,
+                        modelName = selectedModel.value.name
                     ))
                 }
                 is StreamEvent.StreamError -> {
@@ -152,8 +162,54 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _isLoading.value = false
                     _error.value = event.error
                 }
+                else -> { }
             }
         }
+    }
+
+    fun generateImage(prompt: String, width: Int = 1024, height: Int = 1024) {
+        if (prompt.isBlank()) return
+
+        viewModelScope.launch {
+            val conversationId = _currentConversationId.value
+            if (conversationId == null) {
+                val conversation = repository.createConversation()
+                _currentConversationId.value = conversation.id
+                loadMessages(conversation.id)
+                doGenerateImage(conversation.id, prompt, width, height)
+            } else {
+                doGenerateImage(conversationId, prompt, width, height)
+            }
+        }
+    }
+
+    private suspend fun doGenerateImage(conversationId: String, prompt: String, width: Int, height: Int) {
+        _isGeneratingImage.value = true
+        _showImageSheet.value = false
+        _error.value = null
+
+        // Add placeholder
+        val imageMsg = repository.generateImage(conversationId, prompt)
+        _messages.value = _messages.value + imageMsg
+
+        val result = ImageApi.generateImage(prompt, width, height)
+        result.onSuccess { imageUrl ->
+            _messages.value = _messages.value.map { msg ->
+                if (msg.id == imageMsg.id) {
+                    msg.copy(imageUrl = imageUrl, imageStatus = "completed")
+                } else msg
+            }
+            chatHistory.add(imageMsg.copy(imageUrl = imageUrl, imageStatus = "completed"))
+        }.onFailure { error ->
+            _messages.value = _messages.value.map { msg ->
+                if (msg.id == imageMsg.id) {
+                    msg.copy(imageStatus = "failed")
+                } else msg
+            }
+            _error.value = "Image generation failed: ${error.message}"
+        }
+
+        _isGeneratingImage.value = false
     }
 
     fun deleteConversation(id: String) {
@@ -167,7 +223,5 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearError() {
-        _error.value = null
-    }
+    fun clearError() { _error.value = null }
 }

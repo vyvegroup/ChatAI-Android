@@ -11,6 +11,7 @@ import com.chatai.app.domain.model.ChatMessage
 import com.chatai.app.domain.model.Conversation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
+import java.util.UUID
 
 class ChatRepository(
     private val database: ChatDatabase,
@@ -55,18 +56,42 @@ class ChatRepository(
         messageDao.updateMessageContent(id, content)
     }
 
+    // Image generation placeholder message
+    suspend fun generateImage(conversationId: String, prompt: String): ChatMessage {
+        val imageMsg = ChatMessage(
+            conversationId = conversationId,
+            role = "image",
+            content = prompt,
+            imageStatus = "generating",
+            imageGenerationId = UUID.randomUUID().toString()
+        )
+        saveMessage(imageMsg)
+
+        // Update conversation timestamp
+        val convEntity = conversationDao.getConversationById(conversationId)
+        if (convEntity != null) {
+            conversationDao.updateConversation(
+                convEntity.copy(updatedAt = System.currentTimeMillis())
+            )
+        }
+
+        return imageMsg
+    }
+
     fun sendMessageStream(
         apiKey: String,
         model: String,
         conversationId: String,
         messages: List<ChatMessage>,
-        userMessage: String
+        userMessage: String,
+        modelName: String? = null
     ): Flow<StreamEvent> = flow {
         // Save user message
         val userMsg = ChatMessage(
             conversationId = conversationId,
             role = "user",
-            content = userMessage
+            content = userMessage,
+            modelName = modelName
         )
         saveMessage(userMsg)
         emit(StreamEvent.UserMessageSaved(userMsg))
@@ -84,7 +109,8 @@ class ChatRepository(
             conversationId = conversationId,
             role = "assistant",
             content = "",
-            isStreaming = true
+            isStreaming = true,
+            modelName = modelName
         )
         saveMessage(assistantMsg)
         emit(StreamEvent.AssistantMessageStarted(assistantMsg))
@@ -125,4 +151,6 @@ sealed class StreamEvent {
     data class ContentDelta(val messageId: String, val delta: String, val fullContent: String) : StreamEvent()
     data class StreamCompleted(val messageId: String, val fullContent: String) : StreamEvent()
     data class StreamError(val messageId: String, val error: String) : StreamEvent()
+    data class ImageGenerated(val messageId: String, val imageUrl: String) : StreamEvent()
+    data class ImageFailed(val messageId: String, val error: String) : StreamEvent()
 }
