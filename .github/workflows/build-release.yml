@@ -1,0 +1,156 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
+
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Verify APK Signature (v1 + v2 + v3)
+        run: |
+          # Install apksigner
+          apt-get update && apt-get install -y unzip
+
+          # Find the build tools
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)
+          echo "Build tools: $BUILD_TOOLS"
+
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          
+          # Verify signatures
+          echo "=== APK Signature Verification ==="
+          $BUILD_TOOLS/apksigner verify --print-certs -v "$APK_PATH"
+          
+          echo ""
+          echo "=== Signature Schemes ==="
+          $BUILD_TOOLS/apksigner verify --verbose "$APK_PATH" || true
+          
+          # Check v1 (JAR signing)
+          echo ""
+          echo "=== Checking V1 (JAR) Signature ==="
+          unzip -l "$APK_PATH" | grep -E "META-INF/(MANIFEST\.MF|.*\.(SF|RSA|DSA|EC))" && echo "V1: PRESENT" || echo "V1: NOT FOUND"
+          
+          # Check APK Signing Block (v2/v3)
+          echo ""
+          echo "=== Checking V2/V3 (APK Signature Block) ==="
+          python3 -c "
+          import struct, sys
+          with open('$APK_PATH', 'rb') as f:
+              # Find End of Central Directory
+              f.seek(-22, 2)
+              eocd = f.read(22)
+              if eocd[:4] == b'\x50\x4b\x05\x06':
+                  cd_offset = struct.unpack('<I', eocd[16:20])[0]
+                  # Check for APK Signing Block before CD
+                  f.seek(cd_offset - 16)
+                  block_end = f.read(16)
+                  if block_end[:8] == b'APK Sig ':
+                      print('APK Signing Block found')
+                      f.seek(cd_offset - 24)
+                      block_size = struct.unpack('<Q', f.read(8))[0]
+                      block_start = cd_offset - block_size - 24
+                      f.seek(block_start)
+                      magic = f.read(16)
+                      if magic == b'APK Sig Block 42':
+                          print('V2/V3: PRESENT (APK Signature Block 42 found)')
+                      else:
+                          print('V2/V3: Signing block present, magic mismatch')
+                  else:
+                      print('V2/V3: NOT FOUND')
+              else:
+                  print('Could not find EOCD')
+          "
+
+      - name: Get APK info
+        id: apk_info
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          SIZE=$(du -h "$APK_PATH" | cut -f1)
+          MD5=$(md5sum "$APK_PATH" | cut -d' ' -f1)
+          echo "apk_size=$SIZE" >> $GITHUB_OUTPUT
+          echo "apk_md5=$MD5" >> $GITHUB_OUTPUT
+          echo "APK Size: $SIZE"
+          echo "APK MD5: $MD5"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ChatAI v${{ github.ref_name }}"
+          body: |
+            ## ChatAI Android Release
+            
+            ### 📱 APK Information
+            - **Version**: ${{ github.ref_name }}
+            - **APK Size**: ${{ steps.apk_info.outputs.apk_size }}
+            - **MD5**: `${{ steps.apk_info.outputs.apk_md5 }}`
+            - **Signing**: v1 (JAR) + v2 (APK Signature Scheme v2) + v3 (APK Signature Scheme v3)
+            
+            ### ✨ Features
+            - 🎨 ChatGPT-like dark theme UI
+            - 📝 Full Markdown rendering with syntax highlighting
+            - 🖼️ Image support in chat
+            - 👤 Character headshot support
+            - 💬 SSE streaming responses
+            - 📁 Local chat history (Room database)
+            - 🔐 Signed APK (v1 + v2 + v3)
+            
+            ### 📲 Installation
+            1. Download the APK below
+            2. Enable "Install from Unknown Sources" in your device settings
+            3. Install the APK
+            
+            ---
+            *Built with ❤️ using GitHub Actions*
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatAI-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 90

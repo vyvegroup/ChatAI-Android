@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="chatgpt_bg">#FF343541</color>
+    <color name="chatgpt_sidebar">#FF202123</color>
+    <color name="chatgpt_user_msg">#FF343541</color>
+    <color name="chatgpt_assistant_msg">#FF444654</color>
+    <color name="chatgpt_input_bg">#FF40414F</color>
+    <color name="chatgpt_border">#FF565869</color>
+    <color name="chatgpt_text_primary">#FFECECF1</color>
+    <color name="chatgpt_text_secondary">#FFB4B4B4</color>
+    <color name="chatgpt_accent">#FF10A37F</color>
+</resources>

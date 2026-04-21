@@ -1,0 +1,26 @@
+package com.chatai.app.data.local.dao
+
+import androidx.room.*
+import com.chatai.app.data.local.entity.MessageEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface MessageDao {
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+    fun getMessagesByConversation(conversationId: String): Flow<List<MessageEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(message: MessageEntity)
+
+    @Update
+    suspend fun updateMessage(message: MessageEntity)
+
+    @Delete
+    suspend fun deleteMessage(message: MessageEntity)
+
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteMessagesByConversation(conversationId: String)
+
+    @Query("UPDATE messages SET content = :content WHERE id = :id")
+    suspend fun updateMessageContent(id: String, content: String)
+}
