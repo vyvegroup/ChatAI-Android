@@ -3,6 +3,8 @@ package com.chatai.app.ui.components
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -301,14 +303,14 @@ fun GalleryRow(
         }
 
         // Horizontal scrollable image row - no scrollbar visible
-        androidx.compose.foundation.lazy.LazyRow(
+        LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(x = 60.dp), // offset to align with text content
+                .padding(start = 60.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(end = 16.dp)
         ) {
-            items(messages) { message ->
+            itemsIndexed(messages) { index, message ->
                 when {
                     message.imageStatus == "generating" -> {
                         Surface(

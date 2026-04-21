@@ -93,7 +93,7 @@ Each breed has unique characteristics..."
         messageDao.insertMessage(MessageEntity.fromDomainModel(message))
     }
 
-    private suspend fun updateMessageContent(id: String, content: String) {
+    suspend fun updateMessageContent(id: String, content: String) {
         messageDao.updateMessageContent(id, content)
     }
 
