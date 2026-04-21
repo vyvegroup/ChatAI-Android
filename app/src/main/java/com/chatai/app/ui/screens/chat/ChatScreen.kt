@@ -12,7 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chatai.app.domain.model.Conversation
@@ -31,11 +31,8 @@ fun ChatScreen(
     var sidebarOpen by remember { mutableStateOf(false) }
     val messages by chatViewModel.messages.collectAsState()
     val isLoading by chatViewModel.isLoading.collectAsState()
-    val inputText by remember { mutableStateOf("") }
     var currentInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
 
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(messages.size) {
@@ -97,6 +94,7 @@ fun ChatScreen(
                 if (messages.isEmpty()) {
                     // Empty state - Welcome screen
                     WelcomeScreen(
+                        modifier = Modifier.weight(1f),
                         onSendExample = { example ->
                             currentInput = example
                         }
@@ -196,12 +194,12 @@ private fun TopBar(
 
 @Composable
 private fun WelcomeScreen(
+    modifier: Modifier = Modifier,
     onSendExample: (String) -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .weight(1f),
+        modifier = modifier
+            .fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
