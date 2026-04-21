@@ -21,7 +21,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import com.chatai.app.ImageSaver
 import com.chatai.app.ui.theme.ChatColors
-import kotlinx.coroutines.CoroutineScope
+import io.noties.markwon.Markwon
+import io.noties.markwon.core.CorePlugin
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.html.HtmlPlugin
+import io.noties.markwon.image.coil.CoilImagesPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -41,7 +47,7 @@ fun MarkdownContent(
                 setLineSpacing(4f, 1f)
                 movementMethod = LinkMovementMethod.getInstance()
                 setLinkTextColor(android.graphics.Color.parseColor("#10A37F"))
-                setOnClickListener { /* handle clicks */ }
+                setOnClickListener { }
             }
         },
         modifier = modifier.fillMaxWidth(),
@@ -57,12 +63,12 @@ fun MarkdownContent(
 
 private fun createMarkwon(context: android.content.Context): Markwon {
     return Markwon.builder(context)
-        .usePlugin(io.noties.markwon.core.CorePlugin.create())
-        .usePlugin(io.noties.markwon.ext.strikethrough.StrikethroughPlugin.create())
-        .usePlugin(io.noties.markwon.ext.tables.TablePlugin.create(context))
-        .usePlugin(io.noties.markwon.html.HtmlPlugin.create())
-        .usePlugin(io.noties.markwon.linkify.LinkifyPlugin.create())
-        .usePlugin(io.noties.markwon.image.coil.CoilImagesPlugin.create(context))
+        .usePlugin(CorePlugin.create())
+        .usePlugin(StrikethroughPlugin.create())
+        .usePlugin(TablePlugin.create(context))
+        .usePlugin(HtmlPlugin.create())
+        .usePlugin(LinkifyPlugin.create())
+        .usePlugin(CoilImagesPlugin.create(context))
         .build()
 }
 
@@ -74,7 +80,9 @@ fun GeneratedImageCard(
     onSaveImage: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isSaving by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -82,9 +90,7 @@ fun GeneratedImageCard(
             .clip(RoundedCornerShape(12.dp)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             AsyncImage(
                 model = imageUrl,
                 contentDescription = prompt,
@@ -93,31 +99,38 @@ fun GeneratedImageCard(
                     .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
             )
 
-            // Save button overlay (bottom-right)
-            if (onSaveImage != null) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .size(36.dp),
-                    shape = CircleShape,
-                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = androidx.compose.ui.graphics.Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Save image",
-                                tint = androidx.compose.ui.graphics.Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+            Surface(
+                onClick = {
+                    if (isSaving || saved) return@Surface
+                    isSaving = true
+                    scope.launch(Dispatchers.IO) {
+                        val result = ImageSaver.saveImage(context, imageUrl, "ChatAI Image")
+                        isSaving = false
+                        saved = result.isSuccess
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(36.dp),
+                shape = CircleShape,
+                color = if (saved) ChatColors.Accent
+                       else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save image",
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -184,9 +197,6 @@ fun ImageGeneratingPlaceholder(
     }
 }
 
-/**
- * Save button that can be used as overlay on images.
- */
 @Composable
 fun ImageSaveButton(
     imageUrl: String,
