@@ -7,7 +7,7 @@ import android.widget.TextView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import android.graphics.Color as AndroidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.Markwon
@@ -29,10 +29,10 @@ fun MarkdownContent(
     AndroidView(
         factory = { ctx ->
             TextView(ctx).apply {
-                setTextColor(Color(0xFFECECF1).toArgb())
+                setTextColor(AndroidColor.parseColor("#ECECF1"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 movementMethod = LinkMovementMethod.getInstance()
-                setLinkTextColor(Color(0xFF10A37F).toArgb())
+                setLinkTextColor(AndroidColor.parseColor("#10A37F"))
             }
         },
         modifier = modifier,
