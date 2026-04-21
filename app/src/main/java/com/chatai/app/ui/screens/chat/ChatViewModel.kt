@@ -4,28 +4,19 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chatai.app.ChatApplication
-import com.chatai.app.data.local.ChatDatabase
-import com.chatai.app.data.remote.OpenRouterApi
-import com.chatai.app.data.remote.dto.MessageDto
 import com.chatai.app.data.repository.ChatRepository
 import com.chatai.app.data.repository.StreamEvent
 import com.chatai.app.domain.model.ChatMessage
-import com.chatai.app.domain.model.Conversation
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.UUID
-import javax.inject.Inject
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: ChatRepository
-    private val database: ChatDatabase
 
     init {
         val app = application as ChatApplication
         repository = app.container.repository
-        database = app.container.database
     }
 
     private val _apiKey = MutableStateFlow("")
