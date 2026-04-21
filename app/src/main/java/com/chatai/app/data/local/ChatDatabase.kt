@@ -20,7 +20,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class ChatDatabase : RoomDatabase() {
@@ -39,6 +39,8 @@ abstract class ChatDatabase : RoomDatabase() {
                     "chat_database"
                 )
                 .addMigrations(MIGRATION_1_2)
+                // If migration still fails, recreate DB rather than crash
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

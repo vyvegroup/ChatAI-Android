@@ -2,6 +2,7 @@ package com.chatai.app.ui.screens.chat
 
 import android.app.Application
 import android.util.Log
+import com.chatai.app.BuildConfig
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chatai.app.ChatApplication
@@ -95,7 +96,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var chatHistory = mutableListOf<ChatMessage>()
 
     init {
-        _apiKey.value = "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"
+        _apiKey.value = BuildConfig.OPENROUTER_API_KEY
     }
 
     fun setApiKey(key: String) { _apiKey.value = key }

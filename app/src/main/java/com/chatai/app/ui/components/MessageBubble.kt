@@ -79,7 +79,8 @@ private fun ImageMessage(message: ChatMessage, modifier: Modifier = Modifier) {
                 GeneratedImageCard(
                     imageUrl = message.imageUrl,
                     prompt = message.content,
-                    modifier = Modifier.fillMaxWidth(0.85f)
+                    modifier = Modifier.fillMaxWidth(0.85f),
+                    onSaveImage = null // Save button is on the card itself
                 )
             }
             message.imageStatus == "failed" -> {
@@ -154,7 +155,6 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
             .animateContentSize(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Avatar - use headshot if available
         if (message.characterHeadshotUrl != null) {
             AsyncImage(
                 model = message.characterHeadshotUrl,
@@ -184,12 +184,10 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Name row with optional inline headshot
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // If character headshot is available, show it inline next to the name
                 if (message.characterHeadshotUrl != null && message.characterName != null) {
                     AsyncImage(
                         model = message.characterHeadshotUrl,
@@ -221,7 +219,6 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
                 }
             }
 
-            // Content
             when {
                 message.isStreaming && message.content.isEmpty() -> {
                     CircularProgressIndicator(
@@ -244,26 +241,10 @@ private fun AssistantMessage(message: ChatMessage, modifier: Modifier = Modifier
                     }
                 }
             }
-
-            // Image attachment (for standalone images)
-            message.imageUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = "Chat image",
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .padding(top = 8.dp),
-                )
-            }
         }
     }
 }
 
-/**
- * Horizontal scrollable gallery row for grouped gallery images.
- * No scrollbar shown, user can swipe horizontally.
- */
 @Composable
 fun GalleryRow(
     messages: List<ChatMessage>,
@@ -274,7 +255,6 @@ fun GalleryRow(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Assistant header
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -302,7 +282,6 @@ fun GalleryRow(
             )
         }
 
-        // Horizontal scrollable image row - no scrollbar visible
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -340,12 +319,11 @@ fun GalleryRow(
                         }
                     }
                     message.imageUrl != null -> {
-                        Surface(
+                        Box(
                             modifier = Modifier
                                 .width(240.dp)
                                 .height(200.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            color = ChatColors.SurfaceVariant
+                                .clip(RoundedCornerShape(12.dp))
                         ) {
                             AsyncImage(
                                 model = message.imageUrl,
@@ -353,6 +331,13 @@ fun GalleryRow(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(12.dp)),
+                            )
+                            // Save button overlay
+                            ImageSaveButton(
+                                imageUrl = message.imageUrl,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(6.dp)
                             )
                         }
                     }
