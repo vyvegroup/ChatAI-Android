@@ -97,6 +97,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private var chatHistory = mutableListOf<ChatMessage>()
 
+    // Track gallery IDs that have been processed to prevent duplicates
+    private val processedGalleryIds = mutableSetOf<String>()
+
     init {
         _apiKey.value = BuildConfig.OPENROUTER_API_KEY
         // Restore saved model preference
@@ -126,6 +129,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val conversation = repository.createConversation()
                 _currentConversationId.value = conversation.id
                 chatHistory.clear()
+                processedGalleryIds.clear()
                 _messages.value = emptyList()
                 loadMessages(conversation.id)
             } catch (e: Exception) {
@@ -475,11 +479,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (galleryMessages.isNotEmpty()) {
-                val existingIds = _messages.value.map { it.id }.toSet()
-                val newMsgs = galleryMessages.filter { it.id !in existingIds }
-                if (newMsgs.isNotEmpty()) {
-                    _messages.value = _messages.value + newMsgs
-                }
+                // Use distinctBy to absolutely prevent duplicate message IDs
+                // Room Flow may have already emitted these messages concurrently
+                _messages.value = (_messages.value + galleryMessages).distinctBy { it.id }
             }
 
             // Generate images SEQUENTIALLY to avoid race conditions on _messages

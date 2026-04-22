@@ -180,8 +180,8 @@ fun ChatScreen(
                     ) {
                         items(items = displayItems, key = {
                             when (it) {
-                                is DisplayItem.SingleMessage -> it.message.id
-                                is DisplayItem.GalleryGroup -> "gallery_${it.messages.firstOrNull()?.galleryId ?: ""}"
+                                is DisplayItem.SingleMessage -> "msg_${it.message.id}"
+                                is DisplayItem.GalleryGroup -> "gallery_${it.messages.firstOrNull()?.galleryId ?: ""}_${it.messages.size}_${it.messages.firstOrNull()?.id ?: ""}"
                             }
                         }) { item ->
                             when (item) {

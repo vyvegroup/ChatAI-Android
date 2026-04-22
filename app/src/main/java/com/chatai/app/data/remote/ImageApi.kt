@@ -127,26 +127,38 @@ object ImageApi {
 
             Log.d(TAG, "Generate response: $responseBody")
 
-            // Safely parse response - this is the most crash-prone part
+            // Extract UUID — try multiple paths (API response may vary)
+            // PHP reference: genData.data.uuid (NOT data.task.uuid)
             val uuid: String? = try {
-                val taskResponse = safeParseResponse<ImageTaskResponse>(responseBody)
-                if (taskResponse?.error != null) {
-                    lastError = Exception("API Error: ${taskResponse.error}")
+                val json = JsonParser.parseString(responseBody).asJsonObject
+                val dataObj = json.getAsJsonObject("data")
+
+                // Check for API error at top level
+                val errorVal = json.get("error")
+                if (errorVal != null && !errorVal.isJsonNull) {
+                    lastError = Exception("API Error: ${errorVal.asString}")
                     return@withContext Result.failure(lastError)
                 }
-                taskResponse?.data?.task?.uuid
+
+                // Path 1: data.uuid (PHP reference — correct for zimage.run)
+                var uuidVal: String? = dataObj?.get("uuid")?.asString
+
+                // Path 2: data.task.uuid (fallback for different response formats)
+                if (uuidVal == null) {
+                    uuidVal = dataObj?.getAsJsonObject("task")?.get("uuid")?.asString
+                }
+
+                // Path 3: typed parsing as last resort
+                if (uuidVal == null) {
+                    val taskResponse = safeParseResponse<ImageTaskResponse>(responseBody)
+                    uuidVal = taskResponse?.data?.task?.uuid
+                }
+
+                uuidVal
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to parse generate response as ImageTaskResponse", e)
-                // Try parsing as raw JSON to extract uuid manually
-                try {
-                    val json = JsonParser.parseString(responseBody).asJsonObject
-                    val dataObj = json.getAsJsonObject("data")?.getAsJsonObject("task")
-                    dataObj?.get("uuid")?.asString
-                } catch (e2: Exception) {
-                    Log.e(TAG, "Manual JSON parsing also failed", e2)
-                    lastError = Exception("Không thể đọc phản hồi từ server: ${responseBody.take(200)}")
-                    return@withContext Result.failure(lastError)
-                }
+                Log.e(TAG, "Failed to parse generate response", e)
+                lastError = Exception("Không thể đọc phản hồi từ server: ${responseBody.take(200)}")
+                return@withContext Result.failure(lastError)
             }
 
             if (uuid == null) {
@@ -158,10 +170,10 @@ object ImageApi {
 
             // Step 2: Poll for completion (sequential, not parallel)
             var attempts = 0
-            val maxAttempts = 90 // ~7.5 minutes with 5s intervals
+            val maxAttempts = 60 // 3 minutes with 3s intervals (same as PHP proxy)
 
             while (attempts < maxAttempts) {
-                delay(5000)
+                delay(3000)
                 attempts++
 
                 var checkBody: String? = null
@@ -170,6 +182,7 @@ object ImageApi {
                         .url("$BASE_URL/task/$uuid")
                         .addHeader("Accept", "*/*")
                         .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
+                        .addHeader("Origin", "https://zimage.run")
                         .addHeader("Referer", "https://zimage.run/")
                         .build()
 
@@ -239,7 +252,7 @@ object ImageApi {
                 }
             }
 
-            lastError = Exception("Hết thời gian tạo ảnh sau ${maxAttempts * 5} giây")
+            lastError = Exception("Hết thời gian tạo ảnh sau ${maxAttempts * 3} giây")
             Result.failure(lastError)
         } catch (e: Exception) {
             // Ultimate safety net - this should never be reached
