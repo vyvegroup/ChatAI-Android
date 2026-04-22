@@ -2,15 +2,15 @@ name: Build & Release APK
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build:
+  build-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -25,14 +25,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Create gradle.properties with secrets
-        run: |
-          echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> gradle.properties
-          echo "IMAGE_PROXY_URL=${{ secrets.IMAGE_PROXY_URL }}" >> gradle.properties
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
 
       - name: Build Signed Release APK
         env:
@@ -40,7 +37,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+          ORG_GRADLE_PROJECT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ORG_GRADLE_PROJECT_IMAGE_PROXY_URL: ${{ secrets.IMAGE_PROXY_URL }}
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -49,16 +48,6 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
 
       - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.1
-          name: ChatAI v1.4.1
-          body: |
-            ## v1.4.1 — Proxy Image API + Crash Fix
-
-            - **PHP Proxy**: Route image generation through configurable proxy (set `IMAGE_PROXY_URL` secret). Falls back to direct calls if empty.
-            - **Duplicate Key Fix**: Prevented LazyColumn/LazyRow crash from duplicate message IDs.
-            - **Model Persistence**: Selected AI model saved between sessions.
-            - **New Signing Key**: New RSA 2048 keystore (JDK 17 compatible).
           files: app/build/outputs/apk/release/*.apk
