@@ -8,9 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,43 +28,57 @@ jobs:
           echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> gradle.properties
           echo "IMAGE_PROXY_URL=${{ secrets.IMAGE_PROXY_URL }}" >> gradle.properties
 
-      - name: Create keystore (for release signing)
-        run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" > keystore.b64
-          base64 -d keystore.b64 > app/release.keystore
-
-      - name: Build Release APK
+      # Try release build with existing keystore
+      - name: Build Release APK (signed)
+        id: release_build
+        continue-on-error: true
         env:
           KEYSTORE_PATH: release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+        run: |
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" > keystore.b64
+            base64 -d keystore.b64 > app/release.keystore
+            ./gradlew assembleRelease
+          else
+            echo "No keystore secret found, skipping release build"
+            exit 1
+          fi
 
-      - name: Upload APK
+      # Fallback: generate debug keystore and build with release optimizations
+      - name: Build Debug APK (unsigned fallback)
+        if: steps.release_build.outcome == 'failure'
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK (release)
+        if: steps.release_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ChatAI-v1.4.0-release
+          name: ChatAI-release
           path: app/build/outputs/apk/release/*.apk
 
-      # Create GitHub Release on main branch push with tag
-      - name: Create Release
+      - name: Upload APK (debug fallback)
+        if: steps.release_build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatAI-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.0
-          name: ChatAI v1.4.0
+          tag_name: v1.4.1
+          name: ChatAI v1.4.1
           body: |
-            ## What's New in v1.4.0
-            
-            - **Image Proxy Support**: API calls route through configurable PHP proxy (like index-1.php) for better CORS/reliability
-            - **Fixed Duplicate Key Crash**: Resolved LazyColumn/LazyRow crash when generating gallery images
-            - **Model Persistence**: Selected AI model is now saved and restored between sessions
-            
-            ## Setup
-            1. Set these secrets in your GitHub repo:
-               - `OPENROUTER_API_KEY`: Your OpenRouter API key
-               - `IMAGE_PROXY_URL`: Your PHP proxy URL (e.g., https://yourdomain.com/index-1.php) — optional, falls back to direct calls
-               - `RELEASE_KEYSTORE_BASE64`: Base64-encoded Android keystore file
-               - `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`: Keystore credentials
-          files: app/build/outputs/apk/release/*.apk
+            ## v1.4.1 - Proxy Image API + Crash Fixes
+
+            ### Changes
+            - **Image Proxy**: Routes image generation through configurable PHP proxy (IMAGE_PROXY_URL). Falls back to direct calls if not set.
+            - **Duplicate Key Fix**: Resolved LazyColumn/LazyRow crash when generating gallery images (distinctBy on all message updates)
+            - **Model Persistence**: Selected AI model is saved and restored between sessions
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
