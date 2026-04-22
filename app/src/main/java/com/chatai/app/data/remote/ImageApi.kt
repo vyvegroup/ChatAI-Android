@@ -1,6 +1,7 @@
 package com.chatai.app.data.remote
 
 import android.util.Log
+import com.chatai.app.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
@@ -50,7 +51,17 @@ data class ImageTaskInfo(
 
 object ImageApi {
     private const val TAG = "ImageApi"
-    private const val BASE_URL = "https://zimage.run/api/z-image"
+    private const val ZIMAGE_BASE = "https://zimage.run/api/z-image"
+
+    /**
+     * Proxy URL from BuildConfig.
+     * If set, all requests go through the PHP proxy (like index-1.php?proxy=generate / ?proxy=task&uuid=xxx).
+     * If empty, fall back to direct zimage.run calls.
+     */
+    private val proxyUrl: String? get() {
+        val url = BuildConfig.IMAGE_PROXY_URL
+        return if (url.isBlank()) null else url.trimEnd('/')
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -62,12 +73,12 @@ object ImageApi {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
-     * Generate an image via zimage.run API.
-     * This method is heavily guarded against crashes:
-     * - All JSON parsing is try-caught
-     * - Network errors are caught gracefully
-     * - Null responses are handled
-     * - Never throws exceptions to caller (always returns Result)
+     * Generate an image via zimage.run API (through proxy if configured).
+     * Uses the same pattern as the PHP proxy:
+     *   - POST ?proxy=generate  ->  forwards to zimage.run/api/z-image/generate
+     *   - GET  ?proxy=task&uuid=xxx  ->  forwards to zimage.run/api/z-image/task/{uuid}
+     *
+     * All JSON parsing is try-caught. Never throws exceptions to caller.
      */
     suspend fun generateImage(
         prompt: String,
@@ -90,14 +101,31 @@ object ImageApi {
             val jsonBody = gson.toJson(request)
             Log.d(TAG, "Generate request: $jsonBody")
 
+            // Choose between proxy and direct call
+            val generateUrl = if (proxyUrl != null) {
+                "$proxyUrl?proxy=generate"
+            } else {
+                "$ZIMAGE_BASE/generate"
+            }
+            Log.d(TAG, "Using URL: $generateUrl (proxy=${proxyUrl != null})")
+
             val httpRequest = Request.Builder()
-                .url("$BASE_URL/generate")
+                .url(generateUrl)
                 .post(jsonBody.toRequestBody(jsonMediaType))
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Accept", "*/*")
-                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
-                .addHeader("Origin", "https://zimage.run")
-                .addHeader("Referer", "https://zimage.run/")
+                // When using proxy, no need for Origin/Referer headers
+                // (proxy adds them server-side like the PHP code does)
+                .apply {
+                    if (proxyUrl == null) {
+                        // Direct call: must spoof Origin/Referer like a browser
+                        addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
+                        addHeader("Origin", "https://zimage.run")
+                        addHeader("Referer", "https://zimage.run/")
+                    } else {
+                        addHeader("User-Agent", "ChatAI-Android/1.4.0")
+                    }
+                }
                 .build()
 
             var responseBody: String? = null
@@ -128,10 +156,8 @@ object ImageApi {
             Log.d(TAG, "Generate response: $responseBody")
 
             // Extract UUID — try multiple paths (API response may vary)
-            // PHP reference: genData.data.uuid (NOT data.task.uuid)
             val uuid: String? = try {
                 val json = JsonParser.parseString(responseBody).asJsonObject
-                val dataObj = json.getAsJsonObject("data")
 
                 // Check for API error at top level
                 val errorVal = json.get("error")
@@ -140,10 +166,20 @@ object ImageApi {
                     return@withContext Result.failure(lastError)
                 }
 
-                // Path 1: data.uuid (PHP reference — correct for zimage.run)
+                // Check for proxy-level error
+                val msgVal = json.get("message")
+                val successVal = json.get("success")
+                if (successVal != null && !successVal.isJsonNull && successVal.asBoolean == false) {
+                    lastError = Exception(msgVal?.asString ?: "Lỗi từ proxy server")
+                    return@withContext Result.failure(lastError)
+                }
+
+                val dataObj = json.getAsJsonObject("data")
+
+                // Path 1: data.uuid (correct for zimage.run)
                 var uuidVal: String? = dataObj?.get("uuid")?.asString
 
-                // Path 2: data.task.uuid (fallback for different response formats)
+                // Path 2: data.task.uuid (fallback)
                 if (uuidVal == null) {
                     uuidVal = dataObj?.getAsJsonObject("task")?.get("uuid")?.asString
                 }
@@ -168,22 +204,34 @@ object ImageApi {
 
             Log.d(TAG, "Task created with UUID: $uuid")
 
-            // Step 2: Poll for completion (sequential, not parallel)
+            // Step 2: Poll for completion (same as PHP proxy: GET ?proxy=task&uuid=xxx)
             var attempts = 0
-            val maxAttempts = 60 // 3 minutes with 3s intervals (same as PHP proxy)
+            val maxAttempts = 60 // 3 minutes with 3s intervals
 
             while (attempts < maxAttempts) {
                 delay(3000)
                 attempts++
 
+                val taskUrl = if (proxyUrl != null) {
+                    "$proxyUrl?proxy=task&uuid=$uuid"
+                } else {
+                    "$ZIMAGE_BASE/task/$uuid"
+                }
+
                 var checkBody: String? = null
                 try {
                     val checkRequest = Request.Builder()
-                        .url("$BASE_URL/task/$uuid")
+                        .url(taskUrl)
                         .addHeader("Accept", "*/*")
-                        .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
-                        .addHeader("Origin", "https://zimage.run")
-                        .addHeader("Referer", "https://zimage.run/")
+                        .apply {
+                            if (proxyUrl == null) {
+                                addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
+                                addHeader("Origin", "https://zimage.run")
+                                addHeader("Referer", "https://zimage.run/")
+                            } else {
+                                addHeader("User-Agent", "ChatAI-Android/1.4.0")
+                            }
+                        }
                         .build()
 
                     val checkResponse = client.newCall(checkRequest).execute()
@@ -200,7 +248,6 @@ object ImageApi {
                         checkResult?.data?.task
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to parse check response at attempt $attempts", e)
-                        // Try raw JSON
                         try {
                             val json = JsonParser.parseString(checkBody).asJsonObject
                             val taskObj = json.getAsJsonObject("data")?.getAsJsonObject("task")
@@ -247,7 +294,6 @@ object ImageApi {
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Poll attempt $attempts failed: ${e.message}")
-                    // Continue polling on transient errors
                     continue
                 }
             }
@@ -255,16 +301,11 @@ object ImageApi {
             lastError = Exception("Hết thời gian tạo ảnh sau ${maxAttempts * 3} giây")
             Result.failure(lastError)
         } catch (e: Exception) {
-            // Ultimate safety net - this should never be reached
             Log.e(TAG, "Unexpected error in generateImage", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Safely parse JSON response, catching all Gson exceptions.
-     * Returns null on any parse failure instead of crashing.
-     */
     private inline fun <reified T> safeParseResponse(json: String): T? {
         return try {
             gson.fromJson(json, T::class.java)

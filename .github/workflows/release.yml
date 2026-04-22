@@ -1,0 +1,71 @@
+name: Build Release APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Create gradle.properties with API keys
+        run: |
+          echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> gradle.properties
+          echo "IMAGE_PROXY_URL=${{ secrets.IMAGE_PROXY_URL }}" >> gradle.properties
+
+      - name: Create keystore (for release signing)
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" > keystore.b64
+          base64 -d keystore.b64 > app/release.keystore
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatAI-v1.4.0-release
+          path: app/build/outputs/apk/release/*.apk
+
+      # Create GitHub Release on main branch push with tag
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.4.0
+          name: ChatAI v1.4.0
+          body: |
+            ## What's New in v1.4.0
+            
+            - **Image Proxy Support**: API calls route through configurable PHP proxy (like index-1.php) for better CORS/reliability
+            - **Fixed Duplicate Key Crash**: Resolved LazyColumn/LazyRow crash when generating gallery images
+            - **Model Persistence**: Selected AI model is now saved and restored between sessions
+            
+            ## Setup
+            1. Set these secrets in your GitHub repo:
+               - `OPENROUTER_API_KEY`: Your OpenRouter API key
+               - `IMAGE_PROXY_URL`: Your PHP proxy URL (e.g., https://yourdomain.com/index-1.php) — optional, falls back to direct calls
+               - `RELEASE_KEYSTORE_BASE64`: Base64-encoded Android keystore file
+               - `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`: Keystore credentials
+          files: app/build/outputs/apk/release/*.apk

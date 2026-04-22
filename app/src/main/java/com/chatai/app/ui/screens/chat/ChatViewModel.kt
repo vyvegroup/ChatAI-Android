@@ -418,10 +418,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 imageType = "standalone",
                 timestamp = baseTime
             )
-            // Dedup: Room Flow may have already emitted this message
-            if (_messages.value.none { it.id == imageMsg.id }) {
-                _messages.value = _messages.value + imageMsg
-            }
+            // Dedup: always use distinctBy to prevent duplicate keys in LazyColumn
+            _messages.value = (_messages.value + imageMsg).distinctBy { it.id }
 
             val result = ImageApi.generateImage(prompt)
             result.onSuccess { imageUrl ->
@@ -569,9 +567,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // Add placeholder
             val imageMsg = repository.generateImage(conversationId, prompt)
             delay(100)
-            if (_messages.value.none { it.id == imageMsg.id }) {
-                _messages.value = _messages.value + imageMsg
-            }
+            // Dedup: always use distinctBy to prevent duplicate keys in LazyColumn
+            _messages.value = (_messages.value + imageMsg).distinctBy { it.id }
 
             val result = ImageApi.generateImage(prompt, width, height)
             result.onSuccess { imageUrl ->

@@ -21,6 +21,7 @@ android {
         }
 
         buildConfigField("String", "OPENROUTER_API_KEY", "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\"")
+        buildConfigField("String", "IMAGE_PROXY_URL", "\"${project.findProperty("IMAGE_PROXY_URL") ?: ""}\"")
     }
 
     signingConfigs {
