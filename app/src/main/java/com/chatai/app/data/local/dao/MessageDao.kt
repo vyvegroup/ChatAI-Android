@@ -9,6 +9,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
     fun getMessagesByConversation(conversationId: String): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages WHERE imageUrl IS NOT NULL AND imageStatus = 'completed' ORDER BY timestamp DESC")
+    fun getAllCompletedImages(): Flow<List<MessageEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)
 
@@ -29,4 +32,7 @@ interface MessageDao {
 
     @Query("UPDATE messages SET content = :content, characterName = :name, characterHeadshotUrl = :headshotUrl WHERE id = :id")
     suspend fun updateAssistantMessage(id: String, content: String, name: String?, headshotUrl: String?)
+
+    @Query("SELECT * FROM messages WHERE imageUrl IS NOT NULL AND imageStatus = 'completed' ORDER BY timestamp DESC")
+    suspend fun getAllCompletedImagesOnce(): List<MessageEntity>
 }

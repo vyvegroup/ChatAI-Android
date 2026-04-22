@@ -31,6 +31,7 @@ fun Sidebar(
     onConversationClick: (String) -> Unit,
     onNewChat: () -> Unit,
     onDeleteConversation: (String) -> Unit,
+    onOpenGallery: () -> Unit = {},
     isOpen: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -137,7 +138,49 @@ fun Sidebar(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // Gallery AI button
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = ChatColors.SurfaceVariant,
+            onClick = {
+                onClose()
+                onOpenGallery()
+            }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = ChatColors.UserAvatarBg
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.PhotoLibrary,
+                            contentDescription = null,
+                            tint = ChatColors.TextOnAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "Gallery AI",
+                    color = ChatColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Conversations grouped by date
         LazyColumn(

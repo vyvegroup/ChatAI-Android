@@ -1,6 +1,7 @@
 package com.chatai.app.ui.screens.chat
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import com.chatai.app.BuildConfig
 import androidx.lifecycle.AndroidViewModel
@@ -42,6 +43,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val appContext: Application get() = getApplication()
     private val repository: ChatRepository
+    private val prefs = application.getSharedPreferences("chatai_prefs", Context.MODE_PRIVATE)
 
     init {
         val app = application as ChatApplication
@@ -97,6 +99,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         _apiKey.value = BuildConfig.OPENROUTER_API_KEY
+        // Restore saved model preference
+        val savedModelId = prefs.getString("selected_model_id", null)
+        if (savedModelId != null) {
+            AiModels.getModelById(savedModelId)?.let { _selectedModel.value = it }
+        }
     }
 
     fun setApiKey(key: String) { _apiKey.value = key }
@@ -104,6 +111,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun selectModel(model: com.chatai.app.data.remote.AiModel) {
         _selectedModel.value = model
         _showModelSheet.value = false
+        prefs.edit().putString("selected_model_id", model.id).apply()
     }
 
     fun toggleImageSheet() { _showImageSheet.value = !_showImageSheet.value }
@@ -406,7 +414,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 imageType = "standalone",
                 timestamp = baseTime
             )
-            _messages.value = _messages.value + imageMsg
+            // Dedup: Room Flow may have already emitted this message
+            if (_messages.value.none { it.id == imageMsg.id }) {
+                _messages.value = _messages.value + imageMsg
+            }
 
             val result = ImageApi.generateImage(prompt)
             result.onSuccess { imageUrl ->
@@ -464,7 +475,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (galleryMessages.isNotEmpty()) {
-                _messages.value = _messages.value + galleryMessages
+                val existingIds = _messages.value.map { it.id }.toSet()
+                val newMsgs = galleryMessages.filter { it.id !in existingIds }
+                if (newMsgs.isNotEmpty()) {
+                    _messages.value = _messages.value + newMsgs
+                }
             }
 
             // Generate images SEQUENTIALLY to avoid race conditions on _messages
@@ -551,7 +566,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         try {
             // Add placeholder
             val imageMsg = repository.generateImage(conversationId, prompt)
-            _messages.value = _messages.value + imageMsg
+            delay(100)
+            if (_messages.value.none { it.id == imageMsg.id }) {
+                _messages.value = _messages.value + imageMsg
+            }
 
             val result = ImageApi.generateImage(prompt, width, height)
             result.onSuccess { imageUrl ->

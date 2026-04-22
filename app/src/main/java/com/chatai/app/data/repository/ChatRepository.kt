@@ -89,6 +89,12 @@ Each breed has unique characteristics..."
             .map { entities -> entities.map { it.toDomainModel() } }
             .flowOn(Dispatchers.IO)
 
+    // Gallery - all completed images across all conversations
+    fun getAllCompletedImages(): Flow<List<ChatMessage>> =
+        messageDao.getAllCompletedImages()
+            .map { entities -> entities.map { it.toDomainModel() } }
+            .flowOn(Dispatchers.IO)
+
     private suspend fun saveMessage(message: ChatMessage) {
         messageDao.insertMessage(MessageEntity.fromDomainModel(message))
     }

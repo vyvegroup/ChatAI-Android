@@ -25,6 +25,7 @@ import com.chatai.app.data.remote.AiModels
 import com.chatai.app.domain.model.ChatMessage
 import com.chatai.app.domain.model.Conversation
 import com.chatai.app.ui.components.*
+import com.chatai.app.ui.screens.gallery.GalleryScreen
 import com.chatai.app.ui.theme.ChatColors
 
 sealed class DisplayItem {
@@ -71,6 +72,7 @@ fun ChatScreen(
     onSelectConversation: (String) -> Unit
 ) {
     var sidebarOpen by remember { mutableStateOf(false) }
+    var showGallery by remember { mutableStateOf(false) }
     val messages by chatViewModel.messages.collectAsState()
     val isLoading by chatViewModel.isLoading.collectAsState()
     val isGeneratingImage by chatViewModel.isGeneratingImage.collectAsState()
@@ -95,6 +97,12 @@ fun ChatScreen(
             snackbarHostState.showSnackbar(it)
             chatViewModel.clearError()
         }
+    }
+
+    // Show Gallery screen
+    if (showGallery) {
+        GalleryScreen(onBack = { showGallery = false })
+        return
     }
 
     Scaffold(
@@ -228,6 +236,7 @@ fun ChatScreen(
                         chatViewModel.deleteConversation(it)
                         onDeleteConversation(it)
                     },
+                    onOpenGallery = { showGallery = true },
                     isOpen = true,
                     onClose = { sidebarOpen = false }
                 )
