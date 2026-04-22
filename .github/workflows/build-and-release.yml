@@ -1,0 +1,64 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_PATH: release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ORG_GRADLE_PROJECT_IMAGE_PROXY_URL: ${{ secrets.IMAGE_PROXY_URL }}
+        run: |
+          chmod +x gradlew
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Get APK info
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          APK_PATH=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          APK_NAME="ChatAI-v${VERSION}.apk"
+          cp "$APK_PATH" "$APK_NAME"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "APK_NAME=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create Release and Upload APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.apk.outputs.TAG }}" \
+            --title "ChatAI ${{ steps.apk.outputs.VERSION }}" \
+            --notes "## ChatAI Android v${{ steps.apk.outputs.VERSION }}
+
+          ### Changes:
+          - Fix duplicate key crash in chat messages
+          - Add PHP proxy support for image generation API
+          - Add Gallery AI feature
+          - Persist selected AI model preference
+          - Upgrade CI/CD with signed release builds" \
+            "${{ steps.apk.outputs.APK_NAME }}"
